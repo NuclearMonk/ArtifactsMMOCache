@@ -1,24 +1,23 @@
 
 
-from datetime import datetime, timezone
-from typing import Annotated
 from fastapi import FastAPI, HTTPException
-from fastapi import Request as FAPIRequest
-from fastapi.params import Query
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import delete, func, select
 from converters.bank import bank_to_schema
-from converters.item import item_to_model, item_to_schema
-from converters.request import request_to_schema, response_to_schema
+from converters.item import monster_to_model, item_to_schema
+from converters.monster import monster_to_model, monster_to_schema
+from converters.request import request_to_schema
 from environment import BASE_URL, ENGINE, get
 from sqlalchemy.orm import Session
 
 from models.bank import BankModel
 from models.item import CraftItemModel, CraftModel, ItemModel, CraftSkill
+from models.monster import DropRateModel, MonsterModel
 from models.request import RequestModel
 from schemas.item import ItemResponseSchema, ItemSchema, DataPageItemSchema
-from schemas.request import Request, Response
+from schemas.monster import DataPageMonsterSchema, MonsterResponseSchema, MonsterSchema
+from schemas.request import Request
 from schemas.status import StatusResponseSchema
-from schemas.account import AccountDetailsSchema, MyAccountDetails, MyAccountDetailsSchema
+from schemas.account import AccountDetailsSchema, MyAccountDetailsSchema
 from schemas.bank import BankResponseSchema
 
 app = FastAPI()
@@ -79,7 +78,7 @@ def get_item(item_code: str) -> ItemResponseSchema:
         resp = get(BASE_URL+f'/items/{item_code}')
         if resp.ok:
             item = ItemResponseSchema.model_validate(resp.json()).data
-            session.add(item_to_model(item))
+            session.add(monster_to_model(item))
             session.commit()
             return ItemResponseSchema(data=item)
         raise HTTPException(
@@ -102,14 +101,13 @@ def refresh_item_cache() -> list[ItemSchema]:
         items.extend(resp.data)
     with Session(ENGINE) as session:
         session.execute(delete(ItemModel))
-        models = [item_to_model(item) for item in items]
-        session.add_all(models)
+        session.add_all(monster_to_model(item) for item in items)
         session.commit()
     return items
 
 
-@app.get('/items')
-def get_all_items(craft_material: str | None = None,
+@app.get('/cache/items')
+def get_item_list(craft_material: str | None = None,
                   craft_skill: CraftSkill | None = None,
                   min_level: int | None = None,
                   max_level: int | None = None,
@@ -135,3 +133,106 @@ def get_all_items(craft_material: str | None = None,
                     CraftItemModel.item_code == craft_material
             )
         return [item_to_schema(m) for m in session.scalars(stmt)]
+
+
+@app.get('/items')
+def get_all_items(craft_material: str | None = None,
+                  craft_skill: CraftSkill | None = None,
+                  min_level: int | None = None,
+                  max_level: int | None = None,
+                  name: str | None = None,
+                  type: str | None = None,
+                  page: int = 1,
+                  size: int = 50) -> DataPageItemSchema:
+    with Session(ENGINE) as session:
+        stmt = select(ItemModel).offset((page-1)*size).limit(size)
+
+        if min_level:
+            stmt = stmt.where(ItemModel.level >= min_level)
+        if max_level:
+            stmt = stmt.where(ItemModel.level <= max_level)
+        if name:
+            stmt = stmt.where(ItemModel.name == name)
+        if type:
+            stmt = stmt.where(ItemModel.type == type)
+        if craft_skill:
+            stmt = stmt.join(CraftModel, ItemModel.craft).where(
+                CraftModel.skill == craft_skill)
+        if craft_material:
+            stmt = stmt.join(CraftModel, ItemModel.craft).join(
+                CraftItemModel, CraftModel.items).where(
+                    CraftItemModel.item_code == craft_material
+            )
+        total = session.scalar(select(func.count()).select_from(ItemModel))
+        return DataPageItemSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[item_to_schema(m) for m in session.scalars(stmt)])
+
+
+@app.get('/cache/monsters/refresh')
+def refresh_item_cache() -> list[MonsterSchema]:
+    page_size = 100
+    page = 1
+    monsters: list[MonsterSchema] = []
+    resp = get(BASE_URL + f'/monsters/', {'page': page, 'size': page_size})
+
+    resp = DataPageMonsterSchema.model_validate(resp.json())
+    monsters.extend(resp.data)
+    while resp.page * page_size < resp.total:
+        page = resp.page+1
+        resp = get(BASE_URL + f'/items/', {'page': page, 'size': page_size})
+        resp = DataPageMonsterSchema.model_validate(resp.json())
+        monsters.extend(resp.data)
+    with Session(ENGINE) as session:
+        session.execute(delete(MonsterModel))
+        session.add_all(monster_to_model(monster) for monster in monsters)
+        session.commit()
+    return monsters
+
+
+@app.get('/cache/monsters')
+def get_all_monsters(drop: str | None = None,
+                     min_level: int | None = None,
+                     max_level: int | None = None,) -> list[MonsterSchema]:
+    with Session(ENGINE) as session:
+        stmt = select(MonsterModel)
+        if min_level:
+            stmt = stmt.where(MonsterModel.level >= min_level)
+        if max_level:
+            stmt = stmt.where(MonsterModel.level <= max_level)
+        if drop:
+            stmt = stmt.join(DropRateModel, MonsterModel.drops).where(
+                DropRateModel.item_code == drop)
+        return [monster_to_schema(m) for m in session.scalars(stmt)]
+
+
+@app.get('/monsters/{monster_code}')
+def get_item(monster_code: str) -> MonsterResponseSchema:
+    with Session(ENGINE) as session:
+        if m := session.scalar(select(MonsterModel).where(MonsterModel.code == monster_code)):
+            return MonsterResponseSchema(data=monster_to_schema(m))
+        resp = get(BASE_URL+f'/items/{monster_code}')
+        if resp.ok:
+            item = MonsterResponseSchema.model_validate(resp.json()).data
+            session.add(monster_to_model(item))
+            session.commit()
+            return MonsterResponseSchema(data=item)
+        raise HTTPException(
+            status_code=404, detail=f'Monster {monster_code=} Not Found')
+
+
+@app.get('/monsters')
+def get_all_monsters(drop: str | None = None,
+                     min_level: int | None = None,
+                     max_level: int | None = None,
+                     page: int = 1,
+                     size: int = 50) -> DataPageMonsterSchema:
+    with Session(ENGINE) as session:
+        stmt = select(MonsterModel).offset((page-1)*size).limit(size)
+        if min_level:
+            stmt = stmt.where(MonsterModel.level >= min_level)
+        if max_level:
+            stmt = stmt.where(MonsterModel.level <= max_level)
+        if drop:
+            stmt = stmt.join(DropRateModel, MonsterModel.drops).where(
+                DropRateModel.item_code == drop)
+        total = session.scalar(select(func.count()).select_from(MonsterModel))
+        return DataPageMonsterSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[monster_to_schema(m) for m in session.scalars(stmt)])

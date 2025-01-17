@@ -3,6 +3,8 @@
 from enum import Enum
 from pydantic import BaseModel
 
+from schemas.paged import DataPageSchema
+
 class CraftSkill(Enum):
     weaponcrafting = 'weaponcrafting'
     gearcrafting = 'gearcrafting'
@@ -44,9 +46,11 @@ class ItemSchema(BaseModel):
 class ItemResponseSchema(BaseModel):
     data: ItemSchema
 
-class DataPageItemSchema(BaseModel):
+class DataPageItemSchema(DataPageSchema):
     data: list[ItemSchema] 
-    total:  int | None
-    page: int | None
-    size: int | None
-    pages : int | None
+
+class DropRateSchema(BaseModel):
+    code: str
+    rate: int
+    min_quantity: int
+    max_quantity: int

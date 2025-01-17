@@ -34,7 +34,7 @@ def effect_to_schema(model: ItemEffectModel) -> ItemEffectSchema:
     return ItemEffectSchema(name=model.effect_name, value=model.value)
 
 
-def item_to_model(item: ItemSchema) -> ItemModel:
+def monster_to_model(item: ItemSchema) -> ItemModel:
     m = ItemModel()
     m.code = item.code
     m.name = item.name
