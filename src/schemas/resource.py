@@ -5,6 +5,9 @@
 from enum import Enum
 from pydantic import BaseModel
 
+from schemas.item import DropRateSchema
+from schemas.paged import DataPageSchema
+
 
 class GatheringSkill(Enum):
     mining = 'mining'
@@ -14,23 +17,15 @@ class GatheringSkill(Enum):
 
 
 class ResourceSchema(BaseModel):
-    name: str = Field(..., description='The name of the resource', title='Name')
-    code: str = Field(
-        ...,
-        description="The code of the resource. This is the resource's unique identifier (ID).",
-        title='Code',
-    )
-    skill: GatheringSkill = Field(
-        ...,
-        description='The skill required to gather this resource.',
-        title='Skill code',
-    )
-    level: int = Field(
-        ...,
-        description='The skill level required to gather this resource.',
-        title='Level',
-    )
-    drops: List[DropRateSchema] = Field(
-        ..., description='The drops of this resource.', title='Drops'
-    )
+    name: str 
+    code: str
+    skill: GatheringSkill
+    level: int 
+    drops: list[DropRateSchema]
 
+
+class ResourceResponseSchema(BaseModel):
+    data: ResourceSchema
+
+class DataPageResourceSchema(DataPageSchema):
+    data: list[ResourceSchema]

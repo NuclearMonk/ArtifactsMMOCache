@@ -3,8 +3,8 @@ from models.base import Base
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
-class DropRateModel(Base):
-    __tablename__ = 'drop_rates'
+class MonsterDropRateModel(Base):
+    __tablename__ = 'monster_drops'
     monster_code: Mapped[str] = mapped_column(ForeignKey(
         'monsters.code', ondelete='CASCADE'), primary_key=True)
     item_code: Mapped[str] = mapped_column(ForeignKey(
@@ -30,4 +30,4 @@ class MonsterModel(Base):
     res_air: Mapped[int]
     min_gold: Mapped[int]
     max_gold: Mapped[int]
-    drops: Mapped[list[DropRateModel]] = relationship(cascade='all,delete')
+    drops: Mapped[list[MonsterDropRateModel]] = relationship(cascade='all,delete')

@@ -14,7 +14,8 @@ from models.base import Base
 from models.request import RequestModel, ResponseModel
 from models.bank import BankModel
 from models.item import ItemModel, ItemEffectModel, CraftItemModel
-from models.monster import DropRateModel, MonsterModel
+from models.monster import MonsterDropRateModel, MonsterModel
+from models.resource import ResourceDropRateModel, ResourceModel
 from requests import Response
 
 __CREDENTIALS_PATH = Path('data/apikey')
