@@ -1,47 +1,45 @@
-from datetime import datetime, timezone
-from typing import Any
-from requests import get
-from sqlalchemy import Column, DateTime
-from sqlmodel import SQLModel, Field, Relationship, Session, create_engine
-from ratelimiter import rate_session
+from datetime import datetime
+from tokenize import String
+from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-class Request(SQLModel, table=True):
+from models.base import Base
+
+
+class RequestModel(Base):
     __tablename__ = 'requests'
-    id: int | None = Field(default=None, primary_key=True)
-    method: str
-    url: str
-    body: str | None = None
-    params: str | None = None
-    response: 'Response' = Relationship(back_populates='request')
-    timestamp: datetime = Field(sa_column=Column(DateTime(timezone=False), nullable=False))
+    id: Mapped[int | None] = mapped_column(primary_key=True)
+    method: Mapped[str]
+    url: Mapped[str]
+    params: Mapped[str | None]
+    headers: Mapped[str]
+    body: Mapped[str | None]
+    response: Mapped['ResponseModel'] = relationship(back_populates='request')
+    timestamp: Mapped[DateTime] = mapped_column(DateTime(timezone=False))
+
+    def __init__(self, method: str, url: str,  headers: str, timestamp: datetime, params: str | None = None, body: str | None = None):
+        super().__init__()
+        self.method = method
+        self.url = url
+        self.params = params
+        self.headers = headers
+        self.body = body
+        self.timestamp = timestamp
 
 
-class Response(SQLModel, table=True):
+class ResponseModel(Base):
     __tablename__ = 'responses'
-    id: int | None = Field(
-        default=None, foreign_key='requests.id', primary_key=True)
-    code: int
-    body: str | None = None
-    request: Request = Relationship(back_populates='response')
-    timestamp: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    id: Mapped[int] = mapped_column(
+        ForeignKey('requests.id'), primary_key=True)
+    code: Mapped[int]
+    headers: Mapped[str]
+    body: Mapped[str | None]
+    request: Mapped[RequestModel] = relationship(back_populates='response')
+    timestamp: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
 
-
-
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-engine = create_engine(sqlite_url, echo=True)
-
-SQLModel.metadata.create_all(engine)
-
-def get_request(url: str, params: dict[str, Any] = None):
-    with Session(engine) as session:
-        req = Request(method='GET',url = url, params = str(params), timestamp=datetime.now(timezone.utc))
-        resp = rate_session.get(url, params=params)
-        if not resp.ok:
-            return
-        resp = Response(code = resp.status_code, body = resp.text,timestamp=datetime.now(timezone.utc))
-        req.response = resp
-        session.add(req)
-        session.commit()
-
-
+    def __init__(self, code: int, headers: str, body: str, timestamp: datetime):
+        super().__init__()
+        self.code = code
+        self.headers = headers
+        self.body = body
+        self.timestamp = timestamp
