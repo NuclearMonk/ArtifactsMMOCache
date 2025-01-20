@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import and_, delete, func, select
-from converters.bank import bank_to_schema
+from converters.bank import bank_item_to_schema, bank_to_schema
 from converters.item import item_to_model, item_to_schema
 from converters.map import map_to_model, map_to_schema
 from converters.monster import monster_to_model, monster_to_schema
@@ -11,7 +11,7 @@ from converters.resource import resource_to_model, resource_to_schema
 from environment import BASE_URL, ENGINE, get
 from sqlalchemy.orm import Session
 
-from models.bank import BankModel
+from models.bank import BankItemModel, BankModel
 from models.item import CraftItemModel, CraftModel, ItemModel, CraftSkill
 from models.map import MapModel
 from models.monster import MonsterDropRateModel, MonsterModel
@@ -24,7 +24,7 @@ from schemas.request import Request
 from schemas.resource import DataPageResourceSchema, GatheringSkill, ResourceResponseSchema, ResourceSchema
 from schemas.status import StatusResponseSchema
 from schemas.account import AccountDetailsSchema, MyAccountDetailsSchema
-from schemas.bank import BankResponseSchema
+from schemas.bank import BankResponseSchema, DataPageBankItemSchema
 
 app = FastAPI()
 
@@ -74,6 +74,20 @@ def get_bank_details() -> BankResponseSchema:
         m.dirty = False
         session.commit()
         return BankResponseSchema(data=bank_to_schema(m))
+
+
+@app.get('/my/bank/items')
+def get_bank_items(item_code: str | None= None,
+                   page: int = 1,
+                   size: int = 50) -> DataPageBankItemSchema:
+    with Session(ENGINE) as session:
+        stmt = select(BankItemModel)
+        if item_code:
+            stmt = stmt.where(ItemModel.name == item_code)
+        total = session.scalar(select(func.count()).select_from(stmt))
+        stmt = stmt.limit(size).offset(page*size)
+        return DataPageItemSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[
+            bank_item_to_schema(m) for m in session.scalars(stmt)])
 
 
 @app.get('/items/{item_code}')
@@ -170,8 +184,10 @@ def get_all_items(craft_material: str | None = None,
                     CraftItemModel.item_code == craft_material
             )
         total = session.scalar(select(func.count()).select_from(stmt))
+        stmt = stmt.limit(size).offset(page*size)
+
         return DataPageItemSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[
-            item_to_schema(m) for m in session.scalars(stmt)][(page-1)*size:(page)*size])
+            item_to_schema(m) for m in session.scalars(stmt)])
 
 
 @app.get('/cache/monsters/refresh')
@@ -212,11 +228,11 @@ def get_monsters_list(drop: str | None = None,
 
 
 @app.get('/monsters/{monster_code}')
-def get_map(monster_code: str) -> MonsterResponseSchema:
+def get_monsters(monster_code: str) -> MonsterResponseSchema:
     with Session(ENGINE) as session:
         if m := session.scalar(select(MonsterModel).where(MonsterModel.code == monster_code)):
             return MonsterResponseSchema(data=monster_to_schema(m))
-        resp = get(BASE_URL+f'/items/{monster_code}')
+        resp = get(BASE_URL+f'/monsters/{monster_code}')
         if resp.ok:
             monster = MonsterResponseSchema.model_validate(resp.json()).data
             session.add(monster_to_model(monster))
@@ -242,8 +258,9 @@ def get_all_monsters(drop: str | None = None,
             stmt = stmt.join(MonsterDropRateModel, MonsterModel.drops).where(
                 MonsterDropRateModel.item_code == drop)
         total = session.scalar(select(func.count()).select_from(stmt))
+        stmt = stmt.limit(size).offset(page*size)
         return DataPageMonsterSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[
-            monster_to_schema(m) for m in session.scalars(stmt)][(page-1)*size:(page)*size])
+            monster_to_schema(m) for m in session.scalars(stmt)])
 
 
 @app.get('/cache/resources/refresh')
@@ -287,11 +304,11 @@ def get_resources_list(drop: str | None = None,
 
 
 @app.get('/resources/{resource_code}')
-def get_map(resource_code: str) -> ResourceResponseSchema:
+def get_resources(resource_code: str) -> ResourceResponseSchema:
     with Session(ENGINE) as session:
         if m := session.scalar(select(ResourceModel).where(ResourceModel.code == resource_code)):
             return ResourceResponseSchema(data=resource_to_schema(m))
-        resp = get(BASE_URL+f'/items/{resource_code}')
+        resp = get(BASE_URL+f'/resources/{resource_code}')
         if resp.ok:
             resource = ResourceResponseSchema.model_validate(resp.json()).data
             session.add(resource_to_model(resource))
@@ -320,8 +337,9 @@ def get_all_resources(drop: str | None = None,
             stmt = stmt.join(ResourceDropRateModel, ResourceModel.drops).where(
                 ResourceDropRateModel.item_code == drop)
         total = session.scalar(select(func.count()).select_from(stmt))
+        stmt = stmt.limit(size).offset(page*size)
         return DataPageResourceSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[
-            resource_to_schema(m) for m in session.scalars(stmt)][(page-1)*size:(page)*size])
+            resource_to_schema(m) for m in session.scalars(stmt)])
 
 
 @app.get('/cache/maps/refresh')
@@ -346,11 +364,11 @@ def refresh_maps_cache() -> list[MapSchema]:
 
 
 @app.get('/maps/{x}/{y}')
-def get_map(x: int, y: int) -> MapResponseSchema:
+def get_maps(x: int, y: int) -> MapResponseSchema:
     with Session(ENGINE) as session:
         if m := session.scalar(select(MapModel).where(and_(MapModel.x == x, MapModel.y == y))):
             return MapResponseSchema(data=map_to_schema(m))
-        resp = get(BASE_URL+f'/items/{x}/{y}')
+        resp = get(BASE_URL+f'/maps/{x}/{y}')
         if resp.ok:
             map = MapResponseSchema.model_validate(resp.json()).data
             session.add(map_to_model(map))
@@ -361,7 +379,7 @@ def get_map(x: int, y: int) -> MapResponseSchema:
 
 
 @app.get('/maps')
-def get_all_maps(content_code: str | None = None,
+def get_maps_list(content_code: str | None = None,
                  content_type: str | None = None,
                  page: int = 1,
                  size: int = 50) -> DataPageMapSchema:
@@ -372,11 +390,13 @@ def get_all_maps(content_code: str | None = None,
         if content_type:
             stmt = stmt.where(MapModel.content_type == content_type)
         total = session.scalar(select(func.count()).select_from(stmt))
-        return DataPageMapSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[map_to_schema(m) for m in session.scalars(stmt)][(page-1)*size:(page)*size])
+        stmt = stmt.limit(size).offset(page*size)
+
+        return DataPageMapSchema(total=total, page=page, size=size, pages=(total//size)+1, data=[map_to_schema(m) for m in session.scalars(stmt)])
 
 
 @app.get('/cache/maps')
-def get_all_maps(content_code: str | None = None,
+def get_maps_list(content_code: str | None = None,
                  content_type: str | None = None) -> list[MapSchema]:
     with Session(ENGINE) as session:
         stmt = select(MapModel)
@@ -385,3 +405,5 @@ def get_all_maps(content_code: str | None = None,
         if content_type:
             stmt = stmt.where(MapModel.content_type == content_type)
         return [map_to_schema(m) for m in session.scalars(stmt)]
+
+

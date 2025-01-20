@@ -12,7 +12,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from models.base import Base
 from models.request import RequestModel, ResponseModel
-from models.bank import BankModel
+from models.bank import BankModel, BankItemModel
 from models.item import ItemModel, ItemEffectModel, CraftItemModel
 from models.monster import MonsterDropRateModel, MonsterModel
 from models.resource import ResourceDropRateModel, ResourceModel

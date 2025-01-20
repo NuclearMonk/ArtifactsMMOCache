@@ -2,6 +2,7 @@
 from pydantic import BaseModel
 
 from schemas.item import SimpleItemSchema
+from schemas.paged import DataPageSchema
 
 
 class BankSchema(BaseModel):
@@ -14,5 +15,5 @@ class BankSchema(BaseModel):
 class BankResponseSchema(BaseModel):
     data: BankSchema
 
-class BankItemResponseSchema(BaseModel):
-    items : list[SimpleItemSchema]
+class DataPageBankItemSchema(DataPageSchema):
+    data : list[SimpleItemSchema]
