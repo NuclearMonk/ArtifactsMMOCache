@@ -3,6 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import and_, delete, func, select
 from converters.bank import bank_item_to_schema, bank_to_schema
+from converters.character import character_to_model, character_to_schema
 from converters.item import item_to_model, item_to_schema
 from converters.map import map_to_model, map_to_schema
 from converters.monster import monster_to_model, monster_to_schema
@@ -12,11 +13,13 @@ from environment import BASE_URL, ENGINE, get
 from sqlalchemy.orm import Session
 
 from models.bank import BankItemModel, BankModel
+from models.character import CharacterModel
 from models.item import CraftItemModel, CraftModel, ItemModel, CraftSkill
 from models.map import MapModel
 from models.monster import MonsterDropRateModel, MonsterModel
 from models.request import RequestModel
 from models.resource import ResourceDropRateModel, ResourceModel
+from schemas.character import CharacterResponseSchema
 from schemas.item import ItemResponseSchema, ItemSchema, DataPageItemSchema
 from schemas.map import MapResponseSchema, MapSchema, DataPageMapSchema
 from schemas.monster import DataPageMonsterSchema, MonsterResponseSchema, MonsterSchema
@@ -407,3 +410,16 @@ def get_maps_list(content_code: str | None = None,
         return [map_to_schema(m) for m in session.scalars(stmt)]
 
 
+@app.get('/characters/{name}')
+def get_characters(name: str) -> CharacterResponseSchema:
+    with Session(ENGINE) as session:
+        if m := session.scalar(select(CharacterModel).where(CharacterModel.name == name)):
+            return CharacterResponseSchema(data=character_to_schema(m))
+        resp = get(BASE_URL+f'/characters/{name}')
+        if resp.ok:
+            character = CharacterResponseSchema.model_validate(resp.json()).data
+            session.add(character_to_model(character))
+            session.commit()
+            return CharacterResponseSchema(data=character)
+        raise HTTPException(
+            status_code=404, detail=f'Character {name=} Not Found')

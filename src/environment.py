@@ -16,6 +16,7 @@ from models.bank import BankModel, BankItemModel
 from models.item import ItemModel, ItemEffectModel, CraftItemModel
 from models.monster import MonsterDropRateModel, MonsterModel
 from models.resource import ResourceDropRateModel, ResourceModel
+from models.character import InventorySlotModel, CharacterModel
 from models.map import MapModel
 from requests import Response
 

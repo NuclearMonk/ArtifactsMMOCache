@@ -14,7 +14,7 @@ class CharacterSkin(Enum):
     women3 = 'women3'
 
 
-class InventorySlot(BaseModel):
+class InventorySlotSchema(BaseModel):
     slot: int
     code: str
     quantity: int
@@ -95,4 +95,7 @@ class CharacterSchema(BaseModel):
     task_progress: int
     task_total: int
     inventory_max_items: int
-    inventory: list[InventorySlot] | None
+    inventory: list[InventorySlotSchema] | None
+
+class CharacterResponseSchema(BaseModel):
+    data : CharacterSchema
